@@ -1,5 +1,6 @@
 'use strict';
 
+
 const fetch = require("node-fetch");
 
 module.exports = {
@@ -17,34 +18,29 @@ module.exports = {
 
     validateResponsePayload: async (event, context) => {
       let errors = event.allValidationErrors || [];
-      let respuesta = JSON.stringify(event.payload);
-      
-      function sanitizeObject(obj) {
-        if (typeof obj === 'string') {
-          return obj.replace(/\r?\n/g, '').replace(/[^a-zA-Z0-9\s.,":{}[\]]+/g, '').trim();
-        } else if (Array.isArray(obj)) {
-          return obj.map(sanitizeObject);
-        } else if (typeof obj === 'object' && obj !== null) {
-          return Object.fromEntries(
-            Object.entries(obj).map(([key, value]) => [key, sanitizeObject(value)])
-          );
+      let rawParams = event.payload;
+      let params = {};
+
+      // Si el payload ya es un string sin JSON, lo usamos como el valor de 'q'
+      if (typeof rawParams === "string" && !rawParams.trim().startsWith("{") && !rawParams.trim().startsWith("[")) {
+        params.q = rawParams.trim().replace(/\"/g, '"'); // Asegurar que las comillas sean correctas
+      } else {
+        try {
+          params = JSON.parse(rawParams); // Intentar parsear JSON si es posible
+        } catch (e) {
+          context.logger().error("Error parsing params: " + e.message);
+          params = {}; // Si falla, se usa un objeto vacío
         }
-        return obj;
       }
-      
-      
-      context.logger().info('params limpios: ' + sanitizeObject(respuesta));
-      let params = sanitizeObject(respuesta);
-      
-      // Realizar la REST call con limit=5
+
+      // Construcción de la URL con parámetros
       const url = "https://otmgtm-test-mycotm.otmgtm.us-ashburn-1.ocs.oraclecloud.com/logisticsRestApi/resources-int/v2/orderReleases?";
       const username = "ONET.INTEGRATIONTOMBOT";
       const password = "iTombot!1152025";
-      const queryParams = new URLSearchParams(params);
-      queryParams.append("limit", "5");
-      const newurl = `${url}${queryParams.toString()}`;
+      const queryParams = new URLSearchParams(params).toString();
+      const newurl = `${url}${queryParams}&limit=5`;
 
-
+      context.logger().info("URL final construida: " + newurl);
       
       try {
         const response = await fetch(newurl, {
@@ -63,14 +59,12 @@ module.exports = {
         context.logger().info("Response from API: " + JSON.stringify(data));
         
         const orderIds = data.items ? data.items.map(item => item.orderReleaseXid).slice(0, 5) : [];
-        const ordersclean = JSON.stringify(orderIds.join(", "))
+        const ordersclean = JSON.stringify(orderIds.join(", "));
         context.addMessage('The first 5 orders that meet that criteria are:' + ordersclean); 
         context.addMessage(ordersclean);
         if (orderIds.length === 0) {
           context.addMessage('No orders found.'); 
         }
-        
-        
       } catch (error) {
         context.logger().error("Error calling API: " + error.message);
       }
