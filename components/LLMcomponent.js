@@ -21,7 +21,7 @@ module.exports = {
       
       function sanitizeObject(obj) {
         if (typeof obj === 'string') {
-          return obj.replace(/\r?\n/g, '').replace(/[^a-zA-Z0-9\s.,":{}[\]]+/g, '');
+          return obj.replace(/\r?\n/g, '').replace(/[^a-zA-Z0-9\s.,":{}[\]]+/g, '').trim();
         } else if (Array.isArray(obj)) {
           return obj.map(sanitizeObject);
         } else if (typeof obj === 'object' && obj !== null) {
@@ -32,16 +32,22 @@ module.exports = {
         return obj;
       }
       
+      
       context.logger().info('params limpios: ' + sanitizeObject(respuesta));
       let params = sanitizeObject(respuesta);
       
       // Realizar la REST call con limit=5
-      const url = "https://otmgtm-test-mycotm.otmgtm.us-ashburn-1.ocs.oraclecloud.com/logisticsRestApi/resources-int/v2/orderReleases?limit=5";
+      const url = "https://otmgtm-test-mycotm.otmgtm.us-ashburn-1.ocs.oraclecloud.com/logisticsRestApi/resources-int/v2/orderReleases?";
       const username = "ONET.INTEGRATIONTOMBOT";
       const password = "iTombot!1152025";
+      const queryParams = new URLSearchParams(params);
+      queryParams.append("limit", "5");
+      const newurl = `${url}${queryParams.toString()}`;
+
+
       
       try {
-        const response = await fetch(url, {
+        const response = await fetch(newurl, {
           method: "GET",
           headers: {
             "Authorization": "Basic " + Buffer.from(`${username}:${password}`).toString("base64"),
