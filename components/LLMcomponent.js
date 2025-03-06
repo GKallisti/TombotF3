@@ -1,6 +1,5 @@
 'use strict';
 
-
 const fetch = require("node-fetch");
 
 module.exports = {
@@ -23,7 +22,7 @@ module.exports = {
 
       // Si el payload ya es un string sin JSON, lo usamos como el valor de 'q'
       if (typeof rawParams === "string" && !rawParams.trim().startsWith("{") && !rawParams.trim().startsWith("[")) {
-        params.q = rawParams.trim().replace(/\"/g, '"'); // Asegurar que las comillas sean correctas
+        params.q = rawParams.trim(); 
       } else {
         try {
           params = JSON.parse(rawParams); // Intentar parsear JSON si es posible
@@ -33,12 +32,17 @@ module.exports = {
         }
       }
 
-      // Construcción de la URL con parámetros
-      const url = "https://otmgtm-test-mycotm.otmgtm.us-ashburn-1.ocs.oraclecloud.com/logisticsRestApi/resources-int/v2/orderReleases?";
+      // Asegurar que los valores en params.q conserven comillas dobles
+      if (params.q) {
+        params.q = params.q.replace(/\\"/g, '"'); // Reemplazar \" por "
+      }
+
+      // Construcción manual de la URL con parámetros
+      const url = "https://otmgtm-test-mycotm.otmgtm.us-ashburn-1.ocs.oraclecloud.com/logisticsRestApi/resources-int/v2/orderReleases";
       const username = "ONET.INTEGRATIONTOMBOT";
       const password = "iTombot!1152025";
-      const queryParams = new URLSearchParams(params).toString();
-      const newurl = `${url}${queryParams}&limit=5`;
+      const queryParams = `q=${encodeURIComponent(params.q)}&limit=5`;
+      const newurl = `${url}?${queryParams}`;
 
       context.logger().info("URL final construida: " + newurl);
       
