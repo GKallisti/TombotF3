@@ -1,6 +1,7 @@
 'use strict';
-
+const { LlmTransformationContext, TransformPayloadEvent } = require ('@oracle/bots-node-sdk/typings/lib2');
 const fetch = require("node-fetch");
+const { messageFromJson } = require('@oracle/bots-node-sdk/typings/lib2/messagev2/messageFactory');
 
 module.exports = {
   metadata: {
@@ -19,33 +20,49 @@ module.exports = {
       let errors = event.allValidationErrors || [];
       let rawParams = event.payload;
       let params = {};
-
-      // Si el payload ya es un string sin JSON, lo usamos como el valor de 'q'
+      
+      let Intentname = context.getVariable("Intentname");
+      context.logger().info("Intentname: " + Intentname);
+      
+      let endpoint;
+      switch (Intentname) {
+        case "ORsearch":
+          endpoint = "/orderReleases";
+          break;
+        case "ShipmentSearch":
+          endpoint = "/shipments";
+          break;
+        case "InvoiceSearch":
+          endpoint = "/invoices";
+          break;
+        default:
+          endpoint = "/orderReleases"; // Fallback en caso de intent desconocido
+      }
+      
       if (typeof rawParams === "string" && !rawParams.trim().startsWith("{") && !rawParams.trim().startsWith("[")) {
         params.q = rawParams.trim(); 
       } else {
         try {
-          params = JSON.parse(rawParams); // Intentar parsear JSON si es posible
+          params = JSON.parse(rawParams);
         } catch (e) {
           context.logger().error("Error parsing params: " + e.message);
-          params = {}; // Si falla, se usa un objeto vacío
+          params = {};
         }
       }
 
-      // Asegurar que los valores en params.q conserven comillas dobles
       if (params.q) {
-        params.q = params.q.replace(/\\"/g, '"'); // Reemplazar \" por "
+        params.q = params.q.replace(/\\"/g, '"');
       }
 
-      // Construcción manual de la URL con parámetros
-      const url = "https://otmgtm-test-mycotm.otmgtm.us-ashburn-1.ocs.oraclecloud.com/logisticsRestApi/resources-int/v2/orderReleases";
+      const baseUrl = "https://otmgtm-test-mycotm.otmgtm.us-ashburn-1.ocs.oraclecloud.com/logisticsRestApi/resources-int/v2";
       const username = "ONET.INTEGRATIONTOMBOT";
       const password = "iTombot!1152025";
       const queryParams = `q=${encodeURIComponent(params.q)}&limit=5`;
-      const newurl = `${url}?${queryParams}`;
+      const newurl = `${baseUrl}${endpoint}?${queryParams}`;
 
       context.logger().info("URL final construida: " + newurl);
       
+      let apiResponse;
       try {
         const response = await fetch(newurl, {
           method: "GET",
@@ -60,19 +77,43 @@ module.exports = {
         }
         
         const data = await response.json();
-        context.logger().info("Response from API: " + JSON.stringify(data));
+        const items = data.items ? data.items.slice(0, 5) : [];
         
-        const orderIds = data.items ? data.items.map(item => item.orderReleaseXid).slice(0, 5) : [];
-        const ordersclean = JSON.stringify(orderIds.join(", "));
-        context.addMessage('The first 5 orders that meet that criteria are:' + ordersclean); 
-        context.addMessage(ordersclean);
-        if (orderIds.length === 0) {
-          context.addMessage('No orders found.'); 
+        let responseText;
+        if (items.length > 0) {
+          let itemCount = items.length;
+          let itemList;
+          switch (Intentname) {
+            case "ORsearch":
+              itemList = items.map(item => item.orderReleaseXid).join(", ");
+              break;
+            case "ShipmentSearch":
+              itemList = items.map(item => item.shipmentXid).join(", ");
+              break;
+            case "InvoiceSearch":
+              itemList = items.map(item => item.invoiceXid).join(", ");
+              break;
+            default:
+              itemList = "No relevant data found.";
+          }
+          
+          if (itemCount < 5) {
+            responseText = `Only ${itemCount} result(s) found: ${itemList}`;
+          } else {
+            responseText = `The first 5 results that meet that criteria are: ${itemList}`;
+          }
+        } else {
+          responseText = "No records found with those filters.";
         }
+
+        apiResponse = responseText;
       } catch (error) {
         context.logger().error("Error calling API: " + error.message);
+        apiResponse = "An error occurred while fetching data.";
       }
       
+      context.variable('apiResponse', apiResponse);
+      context.logger().info("API response: " + apiResponse);
       if (errors.length > 0) {
         return context.handleInvalidResponse(errors);
       }
@@ -80,6 +121,14 @@ module.exports = {
     },
 
     changeBotMessages: async (event, context) => {
+      if (event.messageType === 'fullResponse') {
+        const mf = context.getMessageFactory();
+        const messageText = context.variable('apiResponse') || "No response available.";
+        const message = mf.createTextMessage(messageText);
+        context.logger().info("Message: " + messageText);
+        context.logger().info(JSON.stringify(event));
+        event.messages.push(message);
+      }
       return event.messages;
     },
 

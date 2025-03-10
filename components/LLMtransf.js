@@ -6,6 +6,7 @@
 // Documentation can be found at https://www.npmjs.com/package/node-fetch
 // Un-comment the next line if you want to make REST calls using node-fetch.
 const fetch = require("node-fetch");
+const { LlmTransformationContext, TransformPayloadEvent } = require ('@oracle/bots-node-sdk/typings/lib2');
 
 module.exports = {
   metadata: {
@@ -38,7 +39,9 @@ module.exports = {
         "prompt": prompt,
         "model": "command",
         "temperature": event.payload.temperature,
-        "stream": event.payload.streamResponse
+        "stream": event.payload.streamResponse,
+        "streamResponse": false
+
       };
     },
 
@@ -61,7 +64,6 @@ module.exports = {
         // non-streaming
         llmPayload.candidates = event.payload.inferenceResponse.generatedTexts.map( item => {return {"content": item.text || "" };});
       }
-
       return llmPayload;
     },
 
