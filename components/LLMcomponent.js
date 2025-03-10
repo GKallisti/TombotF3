@@ -24,19 +24,23 @@ module.exports = {
       let Intentname = context.getVariable("Intentname");
       context.logger().info("Intentname: " + Intentname);
       
-      let endpoint;
+      let endpoint, objectType;
       switch (Intentname) {
         case "ORsearch":
           endpoint = "/orderReleases";
+          objectType = "order releases";
           break;
         case "ShipmentSearch":
           endpoint = "/shipments";
+          objectType = "shipments";
           break;
         case "InvoiceSearch":
           endpoint = "/invoices";
+          objectType = "invoices";
           break;
         default:
-          endpoint = "/orderReleases"; // Fallback en caso de intent desconocido
+          endpoint = "/orderReleases";
+          objectType = "records"; 
       }
       
       if (typeof rawParams === "string" && !rawParams.trim().startsWith("{") && !rawParams.trim().startsWith("[")) {
@@ -82,28 +86,15 @@ module.exports = {
         let responseText;
         if (items.length > 0) {
           let itemCount = items.length;
-          let itemList;
-          switch (Intentname) {
-            case "ORsearch":
-              itemList = items.map(item => item.orderReleaseXid).join(", ");
-              break;
-            case "ShipmentSearch":
-              itemList = items.map(item => item.shipmentXid).join(", ");
-              break;
-            case "InvoiceSearch":
-              itemList = items.map(item => item.invoiceXid).join(", ");
-              break;
-            default:
-              itemList = "No relevant data found.";
-          }
+          let itemList = items.map(item => item.orderReleaseXid || item.shipmentXid || item.invoiceXid).join(", ");
           
           if (itemCount < 5) {
-            responseText = `Only ${itemCount} result(s) found: ${itemList}`;
+            responseText = `Only ${itemCount} ${objectType} found: ${itemList}.`;
           } else {
-            responseText = `The first 5 results that meet that criteria are: ${itemList}`;
+            responseText = `The first 5 ${objectType} that meet that criteria are: ${itemList}.`;
           }
         } else {
-          responseText = "No records found with those filters.";
+          responseText = `No ${objectType} found with those filters.`;
         }
 
         apiResponse = responseText;
