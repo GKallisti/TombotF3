@@ -31,7 +31,7 @@ module.exports = {
           objectType = "order releases";
           break;
         case "ShipmentSearch":
-          endpoint = "/shipments";
+          endpoint = "/shipments?expand=statuses,sEquipments";
           objectType = "shipments";
           break;
         case "InvoiceSearch":
@@ -62,7 +62,7 @@ module.exports = {
       const username = "ONET.INTEGRATIONTOMBOT";
       const password = "iTombot!1152025";
       const queryParams = `q=${encodeURIComponent(params.q)}&limit=5`;
-      const newurl = `${baseUrl}${endpoint}?${queryParams}`;
+      const newurl = `${baseUrl}${endpoint}&${queryParams}`;
 
       context.logger().info("URL final construida: " + newurl);
       
@@ -84,20 +84,36 @@ module.exports = {
         const items = data.items ? data.items.slice(0, 5) : [];
         
         let responseText;
-        if (items.length > 0) {
-          let itemCount = items.length;
-          let itemList = items.map(item => item.orderReleaseXid || item.shipmentXid || item.invoiceXid).join(", ");
-          
-          if (itemCount < 5) {
-            responseText = `Only ${itemCount} ${objectType} found: ${itemList}.`;
-          } else {
-            responseText = `The first 5 ${objectType} that meet that criteria are: ${itemList}.`;
-          }
-        } else {
-          responseText = `No ${objectType} found with those filters.`;
+if (items.length > 0) {
+    let itemDetails = items.map(item => {
+        let shipmentId = item.shipmentXid || "Unknown ID";
+        let enrouteStatusValueGid = "Unknown";
+        
+        // Verificamos si statuses.items existe y es un array, y buscamos el estado ENROUTE
+        if (item.statuses && Array.isArray(item.statuses.items)) {
+            let enrouteStatus = item.statuses.items.find(status => status.statusTypeGid === "ONET.ENROUTE");
+            enrouteStatusValueGid = enrouteStatus ? enrouteStatus.statusValueGid : "Unknown";
         }
+    
+        // Corrección de la obtención de sEquipments
+        let equipmentXid;
+        if (item.sEquipments && Array.isArray(item.sEquipments.items)) {
+            let equipment = item.sEquipments.items.find(sEquipments => sEquipments.sEquipment && sEquipments.sEquipment.sEquipmentXid);
+            equipmentXid = equipment ? equipment.sEquipment.sEquipmentXid : "No Equipment";
+        }
+    
+        return `${shipmentId} (Status Value GID: ${enrouteStatusValueGid}, Equipment: ${equipmentXid})`;
+    }).join("; ");
+    
+    // Ajustamos el mensaje para que muestre la cantidad correcta de elementos
+    responseText = `The first ${items.length} ${objectType} that meet that criteria are: ${itemDetails}.`;
+} else {
+    responseText = `No ${objectType} found with those filters.`;
+}
 
         apiResponse = responseText;
+        context.logger().info("Text response: " + responseText);
+        
       } catch (error) {
         context.logger().error("Error calling API: " + error.message);
         apiResponse = "An error occurred while fetching data.";
