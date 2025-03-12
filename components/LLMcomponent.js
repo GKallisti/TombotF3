@@ -31,7 +31,7 @@ module.exports = {
           objectType = "order releases";
           break;
         case "ShipmentSearch":
-          endpoint = "/shipments?expand=statuses,sEquipments";
+          endpoint = "/shipments";
           objectType = "shipments";
           break;
         case "InvoiceSearch":
@@ -61,7 +61,16 @@ module.exports = {
       const baseUrl = "https://otmgtm-test-mycotm.otmgtm.us-ashburn-1.ocs.oraclecloud.com/logisticsRestApi/resources-int/v2";
       const username = "ONET.INTEGRATIONTOMBOT";
       const password = "iTombot!1152025";
-      const queryParams = `q=${encodeURIComponent(params.q)}&limit=5`;
+      
+      // Se construye la query string: q, luego (si es ShipmentSearch u ORsearch) expand, y por último limit.
+      let queryParams = `q=${encodeURIComponent(params.q)}`;
+      if (Intentname === "ShipmentSearch") {
+          queryParams += "&expand=sEquipments,statuses";
+      } else if (Intentname === "ORsearch") {
+          queryParams += "&expand=destinationLocation,sourceLocation";
+      }
+      queryParams += "&limit=5";
+      
       const newurl = `${baseUrl}${endpoint}?${queryParams}`;
 
       context.logger().info("URL final construida: " + newurl);
@@ -76,7 +85,6 @@ module.exports = {
         }
         let equipmentXid = "No Equipment";
         if (item.sEquipments && Array.isArray(item.sEquipments.items) && item.sEquipments.items.length > 0) {
-          // Se busca el primer sEquipment que tenga sEquipmentXid
           let equipment = item.sEquipments.items.find(eq => eq.sEquipment && eq.sEquipment.sEquipmentXid);
           equipmentXid = equipment ? equipment.sEquipment.sEquipmentXid : "No Equipment";
         } else if (item.sEquipments && Array.isArray(item.sEquipments) && item.sEquipments.length > 0) {
@@ -96,7 +104,16 @@ module.exports = {
       }
 
       function mapOrderRelease(item) {
-        return item.orderReleaseXid || "Unknown Order Release ID";
+        let orderReleaseId = item.orderReleaseXid || "Unknown Order Release ID";
+        let destinationLocationId = "No destination location";
+        let sourceLocationId = "No source location";
+        if (item.destinationLocation && typeof item.destinationLocation === "object") {
+          destinationLocationId = item.destinationLocation.locationXid || destinationLocationId;
+        }
+        if (item.sourceLocation && typeof item.sourceLocation === "object") {
+          sourceLocationId = item.sourceLocation.locationXid || sourceLocationId;
+        }
+        return `${orderReleaseId} (Destination: ${destinationLocationId}, Source: ${sourceLocationId})`;
       }
 
       // Seleccionar función de mapeo según el intent
