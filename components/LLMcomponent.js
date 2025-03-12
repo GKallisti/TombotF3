@@ -62,7 +62,7 @@ module.exports = {
       const username = "ONET.INTEGRATIONTOMBOT";
       const password = "iTombot!1152025";
       const queryParams = `q=${encodeURIComponent(params.q)}&limit=5`;
-      const newurl = `${baseUrl}${endpoint}&${queryParams}`;
+      const newurl = `${baseUrl}${endpoint}?${queryParams}`;
 
       context.logger().info("URL final construida: " + newurl);
       
