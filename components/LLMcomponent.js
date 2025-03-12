@@ -1,5 +1,5 @@
 'use strict';
-const { LlmTransformationContext, TransformPayloadEvent } = require ('@oracle/bots-node-sdk/typings/lib2');
+const { LlmTransformationContext, TransformPayloadEvent } = require('@oracle/bots-node-sdk/typings/lib2');
 const fetch = require("node-fetch");
 const { messageFromJson } = require('@oracle/bots-node-sdk/typings/lib2/messagev2/messageFactory');
 
@@ -62,7 +62,7 @@ module.exports = {
       const username = "ONET.INTEGRATIONTOMBOT";
       const password = "iTombot!1152025";
       
-      // Se construye la query string: q, luego (si es ShipmentSearch u ORsearch) expand, y por último limit.
+      // Construir la query string: q, luego el expand (según intent) y por último limit.
       let queryParams = `q=${encodeURIComponent(params.q)}`;
       if (Intentname === "ShipmentSearch") {
           queryParams += "&expand=sEquipments,statuses";
@@ -75,7 +75,7 @@ module.exports = {
 
       context.logger().info("URL final construida: " + newurl);
 
-      // Funciones de mapeo por tipo
+      // Funciones de mapeo para la respuesta de texto (si se requiere)
       function mapShipment(item) {
         let shipmentId = item.shipmentXid || "Unknown ID";
         let enrouteStatusValueGid = "Unknown";
@@ -116,7 +116,60 @@ module.exports = {
         return `${orderReleaseId} (Destination: ${destinationLocationId}, Source: ${sourceLocationId})`;
       }
 
-      // Seleccionar función de mapeo según el intent
+      // Funciones de mapeo para la tabla
+      function tableMapShipment(item) {
+        let id = item.shipmentXid || "Unknown ID";
+        let status = "Unknown";
+        if (item.statuses && Array.isArray(item.statuses.items)) {
+          let enrouteStatus = item.statuses.items.find(status => status.statusTypeGid === "ONET.ENROUTE");
+          status = enrouteStatus ? enrouteStatus.statusValueGid : "Unknown";
+        }
+        let equipment = "No Equipment";
+        if (item.sEquipments && Array.isArray(item.sEquipments.items) && item.sEquipments.items.length > 0) {
+          let eq = item.sEquipments.items.find(eq => eq.sEquipment && eq.sEquipment.sEquipmentXid);
+          equipment = eq ? eq.sEquipment.sEquipmentXid : "No Equipment";
+        } else if (item.sEquipments && Array.isArray(item.sEquipments) && item.sEquipments.length > 0) {
+          equipment = item.sEquipments[0].equipmentXid || "No Equipment";
+        }
+        return {
+          id: id,
+          Status: status,
+          Equipment: equipment,
+          Objecttype: "Shipment"
+        };
+      }
+
+      function tableMapInvoice(item) {
+        let id = item.invoiceXid || "Unknown Invoice ID";
+        let provider = item.servprovAliasValue || "Unknown Provider";
+        let amountDue = item.netAmountDue ? item.netAmountDue.value + " " + item.netAmountDue.currency : "No Amount";
+        return {
+          id: id,
+          Provider: provider,
+          AmountDue: amountDue,
+          Objecttype: "Invoice"
+        };
+      }
+
+      function tableMapOrderRelease(item) {
+        let id = item.orderReleaseXid || "Unknown Order Release ID";
+        let destination = "No destination location";
+        let source = "No source location";
+        if (item.destinationLocation && typeof item.destinationLocation === "object") {
+          destination = item.destinationLocation.locationXid || destination;
+        }
+        if (item.sourceLocation && typeof item.sourceLocation === "object") {
+          source = item.sourceLocation.locationXid || source;
+        }
+        return {
+          id: id,
+          Destination: destination,
+          Source: source,
+          Objecttype: "Order Release"
+        };
+      }
+
+      // Seleccionar función de mapeo según el intent para el mensaje de texto
       let mapFunction;
       if (Intentname === "ShipmentSearch") {
         mapFunction = mapShipment;
@@ -129,6 +182,7 @@ module.exports = {
       }
 
       let apiResponse;
+      let tableData = [];
       try {
         const response = await fetch(newurl, {
           method: "GET",
@@ -149,6 +203,18 @@ module.exports = {
         if (items.length > 0) {
           let itemDetails = items.map(item => mapFunction(item)).join("; ");
           responseText = `The first ${items.length} ${objectType} that meet that criteria are: ${itemDetails}.`;
+          // Construir la tabla según el tipo
+          tableData = items.map(item => {
+            if (Intentname === "ShipmentSearch") {
+              return tableMapShipment(item);
+            } else if (Intentname === "InvoiceSearch") {
+              return tableMapInvoice(item);
+            } else if (Intentname === "ORsearch") {
+              return tableMapOrderRelease(item);
+            } else {
+              return item;
+            }
+          });
         } else {
           responseText = `No ${objectType} found with those filters.`;
         }
@@ -161,7 +227,12 @@ module.exports = {
         apiResponse = "An error occurred while fetching data.";
       }
 
+      // Guardar las variables en el contexto
       context.variable('apiResponse', apiResponse);
+      context.variable('Table', tableData);
+      context.variable('ObjectType', objectType);
+      context.logger().info("Tabla " + tableData);
+      context.logger().info("tipo de objeto " + objectType);
       context.logger().info("API response: " + apiResponse);
       if (errors.length > 0) {
         return context.handleInvalidResponse(errors);
